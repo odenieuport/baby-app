@@ -1,0 +1,121 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
+
+  --color-bg: #faf9fc;
+  --color-surface: #ffffff;
+  --color-surface-2: #f4f2fa;
+  --color-border: #e8e5f0;
+  --color-text: #201c2b;
+  --color-text-muted: #6b6579;
+
+  --color-primary: #7c6ef2;
+  --color-primary-light: #ede9fe;
+  --color-primary-dark: #5f52d1;
+
+  --color-sleep: #6d5ce8;
+  --color-sleep-bg: #eeebfd;
+  --color-feed: #f2a154;
+  --color-feed-bg: #fdefdf;
+  --color-diaper: #7fb069;
+  --color-diaper-bg: #eaf5e5;
+  --color-health: #ef6f6f;
+  --color-health-bg: #fdecec;
+  --color-temp: #e8767a;
+  --color-temp-bg: #fbeced;
+  --color-growth: #4fb3bf;
+  --color-growth-bg: #e7f6f7;
+  --color-milestone: #d17fc9;
+  --color-milestone-bg: #fbedf9;
+
+  --shadow-soft: 0 1px 2px rgba(32, 28, 43, 0.04), 0 4px 16px rgba(32, 28, 43, 0.06);
+  --shadow-card: 0 2px 8px rgba(32, 28, 43, 0.06), 0 8px 24px rgba(32, 28, 43, 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #16151b;
+    --color-surface: #1f1e27;
+    --color-surface-2: #262530;
+    --color-border: #34323f;
+    --color-text: #f1eff7;
+    --color-text-muted: #a29cb3;
+
+    --color-primary: #9b8ff5;
+    --color-primary-light: #2c2740;
+    --color-primary-dark: #b3a8f9;
+
+    --color-sleep: #a79af5;
+    --color-sleep-bg: #2c2740;
+    --color-feed: #f5b06e;
+    --color-feed-bg: #3a2c1c;
+    --color-diaper: #93c97e;
+    --color-diaper-bg: #223321;
+    --color-health: #f08a8a;
+    --color-health-bg: #3a2222;
+    --color-temp: #f08a8a;
+    --color-temp-bg: #3a2224;
+    --color-growth: #6fc9d4;
+    --color-growth-bg: #1d3438;
+    --color-milestone: #e39bdb;
+    --color-milestone-bg: #3a2638;
+
+    --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.2), 0 4px 16px rgba(0, 0, 0, 0.3);
+    --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.25), 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior-y: none;
+}
+
+button {
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
