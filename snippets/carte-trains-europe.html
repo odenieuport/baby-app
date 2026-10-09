@@ -1,0 +1,243 @@
+<!-- ===== Carte interactive des liaisons ferroviaires — bloc HTML autonome (16:9) ===== -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<style>
+  .rm-wrap { --rm-ink:#0b5c8a; --rm-dot:#103a5c; --rm-bg:#fff; --rm-border:#c9ced6;
+    position:relative; width:100%; aspect-ratio:16/9; border-radius:12px; overflow:hidden;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:#e6e8eb; }
+  .rm-map { position:absolute; inset:0; background:#e6e8eb; }
+
+  /* Panneau de filtres */
+  .rm-panel { position:absolute; left:12px; bottom:12px; z-index:500; background:var(--rm-bg);
+    border:1px solid var(--rm-border); border-radius:12px; padding:10px 12px; min-width:190px;
+    max-height:calc(100% - 24px); overflow:auto; box-shadow:0 2px 10px rgba(0,0,0,.08); }
+  .rm-panel h3 { margin:0 0 6px; font-size:13px; font-weight:600; color:#1d2733;
+    display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .rm-toggle { border:0; background:none; cursor:pointer; font-size:12px; color:var(--rm-ink); padding:0; }
+  .rm-actions { display:flex; gap:10px; margin:0 0 6px; }
+  .rm-actions button { border:0; background:none; padding:0; font-size:12px; color:var(--rm-ink);
+    cursor:pointer; text-decoration:underline; }
+  .rm-item { display:flex; align-items:center; gap:8px; padding:3px 0; font-size:13px; color:#1d2733;
+    cursor:pointer; user-select:none; line-height:1.2; }
+  .rm-item input { position:absolute; opacity:0; pointer-events:none; }
+  .rm-swatch { flex:none; width:14px; height:14px; border-radius:50%; border:2.5px solid var(--c);
+    background:transparent; transition:background .15s; }
+  .rm-item input:checked + .rm-swatch { background:var(--c); }
+  .rm-item input:not(:checked) ~ .rm-name { color:#98a1ac; }
+  .rm-item input:focus-visible + .rm-swatch { outline:2px solid var(--rm-ink); outline-offset:2px; }
+  .rm-sub { display:block; font-size:10.5px; color:#6b7480; }
+  .rm-panel.rm-collapsed .rm-body { display:none; }
+
+  /* Bouton recentrer */
+  .rm-reset { position:absolute; top:12px; right:12px; z-index:500; background:#fff; border:1px solid var(--rm-border);
+    border-radius:8px; padding:6px 10px; font-size:12px; cursor:pointer; color:#1d2733; }
+  .rm-reset:hover { background:#f3f5f7; }
+
+  /* Gares et étiquettes */
+  .rm-wrap .leaflet-tooltip.rm-label { background:transparent; border:0; box-shadow:none; padding:0 0 0 2px;
+    color:var(--rm-ink); font-size:11.5px; font-weight:500; text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff; }
+  .rm-wrap .leaflet-tooltip.rm-label::before { display:none; }
+  .rm-wrap .leaflet-tooltip-left.rm-label { padding:0 2px 0 0; }
+  .rm-wrap .leaflet-tooltip.rm-label.rm-major { font-size:13.5px; font-weight:600; }
+  .rm-wrap.rm-far .leaflet-tooltip.rm-label:not(.rm-major) { display:none; }
+  .rm-wrap.rm-mid .leaflet-tooltip.rm-label.rm-dense { display:none; }
+  .rm-wrap .leaflet-tooltip.rm-label.rm-off { opacity:.3; }
+  .rm-wrap .leaflet-popup-content { margin:10px 12px; font-size:13px; line-height:1.4; }
+  .rm-wrap .leaflet-popup-content b { color:#1d2733; }
+  .rm-pill { display:inline-flex; align-items:center; gap:5px; margin:2px 6px 0 0; font-size:12px; }
+  .rm-pill i { width:9px; height:9px; border-radius:50%; background:var(--c); display:inline-block; }
+  .rm-route { cursor:pointer; }
+
+  @media (max-width:640px) {
+    .rm-wrap { aspect-ratio:auto; height:auto; }
+    .rm-wrap::before { content:""; display:block; padding-top:56.25%; }
+    .rm-panel { left:8px; bottom:8px; padding:8px 10px; min-width:0; }
+    .rm-item { font-size:12px; }
+    .rm-sub { display:none; }
+  }
+</style>
+
+<div class="rm-wrap" id="rm-wrap">
+  <div class="rm-map" id="rm-map" aria-label="Carte interactive des liaisons ferroviaires en Europe"></div>
+  <button type="button" class="rm-reset" id="rm-reset">⟲ Recentrer</button>
+  <div class="rm-panel" id="rm-panel">
+    <h3>Liaisons <button type="button" class="rm-toggle" id="rm-toggle" aria-expanded="true">Masquer</button></h3>
+    <div class="rm-body">
+      <div class="rm-actions"><button type="button" id="rm-all">Tout afficher</button><button type="button" id="rm-none">Tout masquer</button></div>
+      <div id="rm-legend"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://unpkg.com/leaflet-polylineoffset@1.1.1/leaflet.polylineoffset.js"></script>
+<script>
+(function () {
+  // ---- Gares (lat, lng) ----
+  var S = {
+    'Amsterdam':[52.379,4.900], 'Rotterdam':[51.925,4.469], 'Anvers':[51.217,4.421], 'Bruxelles':[50.836,4.336],
+    'Liège':[50.624,5.567], 'Aix-la-Chapelle':[50.768,6.091], 'Cologne':[50.943,6.959], 'Francfort':[50.107,8.663],
+    'Mannheim':[49.479,8.469], 'Munich':[48.140,11.558], 'Salzbourg':[47.813,13.046], 'Rosenheim':[47.850,12.120],
+    'Garmisch-Partenkirchen':[47.491,11.096], 'Innsbruck':[47.263,11.401], 'Zürich':[47.378,8.540], 'Bâle':[47.547,7.590],
+    'Mulhouse':[47.742,7.343], 'Berne':[46.949,7.439], 'Interlaken':[46.691,7.869], 'Dijon':[47.323,5.027],
+    'Frasne':[46.856,6.161], 'Vallorbe':[46.712,6.378], 'Lausanne':[46.517,6.629], 'Genève':[46.210,6.142],
+    'Bellegarde':[46.109,5.826], 'Paris':[48.860,2.355], 'Lyon':[45.760,4.860], 'Chambéry':[45.571,5.920],
+    'Saint-Gervais-les-Bains':[45.907,6.708], 'Moûtiers':[45.486,6.531], 'Aime-La Plagne':[45.555,6.649],
+    'Bourg-Saint-Maurice':[45.618,6.770], 'Grenoble':[45.191,5.714], 'St-Michel-Valloire':[45.217,6.473],
+    'Oulx-Cesana-Sestriere':[45.033,6.833], 'Briançon':[44.899,6.643], 'Turin':[45.062,7.678], 'Milan':[45.486,9.204]
+  };
+  var MAJOR = ['Amsterdam','Bruxelles','Paris','Lyon','Genève','Zürich','Munich','Milan','Francfort','Cologne'];
+  // Position des étiquettes (par défaut : à droite) pour éviter les chevauchements
+  var LABEL_DIR = {
+    'Liège':'bottom', 'Aix-la-Chapelle':'top', 'Rosenheim':'bottom', 'Chambéry':'left', 'Moûtiers':'bottom',
+    'Aime-La Plagne':'top', 'Bourg-Saint-Maurice':'right', 'St-Michel-Valloire':'left', 'Grenoble':'bottom',
+    'Oulx-Cesana-Sestriere':'bottom', 'Turin':'right', 'Briançon':'left', 'Bellegarde':'left', 'Genève':'top',
+    'Mulhouse':'top', 'Paris':'left'
+  };
+  // Gares des Alpes, très proches : étiquettes affichées à partir d'un zoom plus rapproché
+  var DENSE = ['Chambéry','Moûtiers','Aime-La Plagne','Bourg-Saint-Maurice','St-Michel-Valloire','Grenoble',
+    'Oulx-Cesana-Sestriere','Briançon','Bellegarde','Saint-Gervais-les-Bains'];
+  var DIR_OFFSET = { right:[5,0], left:[-5,0], top:[0,-4], bottom:[0,4] };
+
+  // ---- Liaisons : une chaîne = gare desservie, un tableau = point de passage ----
+  var LINES = [
+    { id:'nightjet', name:'Nightjet', color:'#2bb673', offset:-2.5, paths:[
+      ['Bruxelles','Liège','Aix-la-Chapelle','Cologne','Mannheim','Munich','Salzbourg'] ]},
+    { id:'tgv-milan', name:'TGV Paris – Milan', color:'#6a8f1f', offset:-1.5, paths:[
+      ['Paris','Lyon',[45.571,5.920],[45.217,6.473],'Oulx-Cesana-Sestriere','Turin','Milan'] ]},
+    { id:'lyria', name:'TGV Lyria', sub:'+ correspondance locale', color:'#a8862a', offset:2, paths:[
+      ['Paris','Dijon','Mulhouse','Bâle','Zürich'],
+      ['Bâle','Berne','Interlaken'],
+      ['Dijon','Frasne','Vallorbe','Lausanne'],
+      ['Paris','Lyon'],
+      ['Lyon','Bellegarde','Genève','Lausanne'],
+      ['Lyon',[45.90,6.12],'Saint-Gervais-les-Bains'],
+      ['Lyon','Grenoble'],
+      ['Lyon',[45.571,5.920],'Moûtiers','Aime-La Plagne','Bourg-Saint-Maurice'],
+      ['Lyon',[45.571,5.920],'St-Michel-Valloire'] ]},
+    { id:'inoui', name:'TGV INOUI', color:'#1c3d6e', offset:-5, paths:[
+      ['Paris','Bruxelles'], ['Paris','Lyon'] ]},
+    { id:'eurostar-snow', name:'Eurostar Snow', color:'#ec5a24', offset:5.5, paths:[
+      ['Amsterdam','Rotterdam','Anvers','Bruxelles',[48.87,2.78],[46.9,4.5],[45.96,5.35],[46.109,5.826],
+       'Chambéry','Moûtiers','Aime-La Plagne','Bourg-Saint-Maurice'] ]},
+    { id:'ice', name:'ICE', color:'#8e3b97', offset:2.5, paths:[
+      ['Bruxelles','Liège','Aix-la-Chapelle','Cologne','Francfort','Munich'],
+      ['Francfort',[49.01,8.40],[47.55,7.59],'Zürich'],
+      ['Munich','Garmisch-Partenkirchen','Innsbruck'],
+      ['Munich','Rosenheim','Salzbourg'] ]},
+    { id:'idn', name:'Intercités de Nuit', color:'#1fa3e6', offset:5.5, paths:[
+      ['Paris',[46.6,3.4],[44.93,4.89],[44.56,6.08],'Briançon'] ]}
+  ];
+
+  var wrap = document.getElementById('rm-wrap');
+  var HOME = L.latLngBounds([[44.6,2.0],[52.6,13.3]]);
+  var map = L.map('rm-map', { zoomSnap:0.25, minZoom:4, maxZoom:9, worldCopyJump:false })
+    .fitBounds(HOME, { padding:[10,10] });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
+    subdomains:'abcd', maxZoom:19,
+    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+  }).addTo(map);
+
+  var hasOffset = typeof L.Polyline.prototype.setOffset === 'function';
+  var visible = {}, groups = {}, stationLines = {};
+
+  LINES.forEach(function (ln) {
+    visible[ln.id] = true;
+    var g = L.layerGroup();
+    ln.paths.forEach(function (p) {
+      var pts = p.map(function (x) { return typeof x === 'string' ? S[x] : x; });
+      var stops = p.filter(function (x) { return typeof x === 'string'; });
+      stops.forEach(function (s) { (stationLines[s] = stationLines[s] || {})[ln.id] = true; });
+      var opts = { color:ln.color, weight:3.5, opacity:.95, lineJoin:'round', className:'rm-route' };
+      if (hasOffset) opts.offset = ln.offset;
+      var pl = L.polyline(pts, opts)
+        .bindPopup('<b>' + ln.name + '</b><br>' + stops.join(' → '))
+        .on('mouseover', function () { highlight(ln.id); })
+        .on('mouseout', function () { highlight(null); });
+      g.addLayer(pl);
+    });
+    g.addTo(map);
+    groups[ln.id] = g;
+  });
+
+  // ---- Gares ----
+  var stations = {};
+  Object.keys(S).forEach(function (name) {
+    var major = MAJOR.indexOf(name) > -1;
+    var m = L.circleMarker(S[name], {
+      radius: major ? 6 : 4.5, color:'#fff', weight:1.5, fillColor:'#103a5c', fillOpacity:1, pane:'markerPane'
+    }), dir = LABEL_DIR[name] || 'right';
+    m.bindTooltip(name, { permanent:true, direction:dir, offset:DIR_OFFSET[dir], className:'rm-label' + (major ? ' rm-major' : '') + (DENSE.indexOf(name) > -1 ? ' rm-dense' : '') })
+      .bindPopup(function () { return stationPopup(name); })
+      .addTo(map);
+    stations[name] = m;
+  });
+
+  function stationPopup(name) {
+    var ids = Object.keys(stationLines[name] || {});
+    var html = '<b>' + name + '</b><br>';
+    LINES.forEach(function (ln) {
+      if (ids.indexOf(ln.id) > -1)
+        html += '<span class="rm-pill" style="--c:' + ln.color + '"><i></i>' + ln.name + '</span>';
+    });
+    return html;
+  }
+
+  function refreshStations() {
+    Object.keys(stations).forEach(function (name) {
+      var on = Object.keys(stationLines[name] || {}).some(function (id) { return visible[id]; });
+      var m = stations[name];
+      m.setStyle({ fillOpacity: on ? 1 : .2, opacity: on ? 1 : .3 });
+      var tip = m.getTooltip() && m.getTooltip().getElement();
+      if (tip) tip.classList.toggle('rm-off', !on);
+    });
+  }
+
+  function highlight(id) {
+    LINES.forEach(function (ln) {
+      groups[ln.id].eachLayer(function (l) {
+        l.setStyle({ opacity: !id || id === ln.id ? .95 : .15, weight: id === ln.id ? 5 : 3.5 });
+      });
+    });
+  }
+
+  function setVisible(id, on) {
+    visible[id] = on;
+    if (on) groups[id].addTo(map); else map.removeLayer(groups[id]);
+    if (!on) highlight(null);
+    var cb = document.getElementById('rm-cb-' + id);
+    if (cb) cb.checked = on;
+    refreshStations();
+  }
+
+  // ---- Légende / filtres ----
+  var legend = document.getElementById('rm-legend');
+  LINES.forEach(function (ln) {
+    var lab = document.createElement('label');
+    lab.className = 'rm-item';
+    lab.style.setProperty('--c', ln.color);
+    lab.innerHTML = '<input type="checkbox" id="rm-cb-' + ln.id + '" checked>' +
+      '<span class="rm-swatch"></span><span class="rm-name">' + ln.name +
+      (ln.sub ? '<span class="rm-sub">' + ln.sub + '</span>' : '') + '</span>';
+    lab.querySelector('input').addEventListener('change', function (e) { setVisible(ln.id, e.target.checked); });
+    lab.addEventListener('mouseenter', function () { if (visible[ln.id]) highlight(ln.id); });
+    lab.addEventListener('mouseleave', function () { highlight(null); });
+    legend.appendChild(lab);
+  });
+  document.getElementById('rm-all').onclick = function () { LINES.forEach(function (l) { setVisible(l.id, true); }); };
+  document.getElementById('rm-none').onclick = function () { LINES.forEach(function (l) { setVisible(l.id, false); }); };
+  var panel = document.getElementById('rm-panel'), tg = document.getElementById('rm-toggle');
+  tg.onclick = function () {
+    var c = panel.classList.toggle('rm-collapsed');
+    tg.textContent = c ? 'Afficher' : 'Masquer';
+    tg.setAttribute('aria-expanded', String(!c));
+  };
+  if (wrap.clientWidth < 520) tg.onclick();
+
+  document.getElementById('rm-reset').onclick = function () { map.fitBounds(HOME, { padding:[10,10] }); };
+
+  function zoomClass() { var z = map.getZoom(); wrap.classList.toggle('rm-far', z < 5.25); wrap.classList.toggle('rm-mid', z < 6.75); }
+  map.on('zoomend', zoomClass); zoomClass();
+  new ResizeObserver(function () { map.invalidateSize(); }).observe(wrap);
+})();
+</script>
+<!-- ===== Fin du bloc ===== -->
